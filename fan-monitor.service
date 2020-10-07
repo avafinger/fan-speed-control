@@ -1,0 +1,12 @@
+[Unit]
+Description=FAN speed control
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/local/bin/fan-monitor64
+Type=oneshot
+RemainAfterExit=true
+
+[Install]
+Alias=fan-monitor.service
+WantedBy=multi-user.target
