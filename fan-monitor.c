@@ -38,17 +38,28 @@
 #define EXPORT_PWM0_PATH    "/sys/class/pwm/pwmchip0/export"
 #define PWM0_PATH           "/sys/class/pwm/pwmchip0/pwm0"
 #define ENABLE_PWM0_PATH    "/sys/class/pwm/pwmchip0/pwm0/enable"
+#define POLARITY_PWM0_PATH  "/sys/class/pwm/pwmchip0/pwm0/polarity"
 #define DUTY_PWM0_PATH      "/sys/class/pwm/pwmchip0/pwm0/duty_cycle"
 #define PERIOD_PWM0_PATH    "/sys/class/pwm/pwmchip0/pwm0/period"
 #define CPU_TEMP_PATH       "/sys/class/thermal/thermal_zone0/temp"
 #define PWM0_PID            "/var/run/fan-monitor.pid"
 
-#define CPUTEMPS_MAX 6
-int CpuTemps[CPUTEMPS_MAX] = { 75000, 63000, 58000, 55000, 53000, 52000 };
-int PwmDutyCycles[CPUTEMPS_MAX] = { 100000, 300000, 500000, 700000, 800000, 900000 };
-int Percents[CPUTEMPS_MAX] = { 100, 70, 50, 30, 20, 10 };
+#define CPUTEMPS_MAX 7
+int CpuTemps[CPUTEMPS_MAX] = { 75000, 63000, 58000, 55000, 54000, 52000, 51000 };
+int Percents[CPUTEMPS_MAX] = { 100, 70, 50, 30, 20, 10, 5 };
+#ifdef POLARITY
+int PwmDutyCycles[CPUTEMPS_MAX] = { 1000000, 700000, 500000, 300000, 200000, 100000, 50000 };
+#else
+int PwmDutyCycles[CPUTEMPS_MAX] = { 100000, 300000, 500000, 700000, 800000, 900000, 950000 };
+#endif
 
+#ifdef POLARITY
+#define MaxDuty             1000000
+#define DefaultDuty         0
+#else
+#define MaxDuty             100000
 #define DefaultDuty         999999
+#endif
 #define DefaultPercents     0
 
 
@@ -224,6 +235,42 @@ int Write_pwm0_enable(int enable)
     return ret;
 }
 
+int Write_pwm0_polarity(int polarity)
+{
+    int fh, ret;
+    char buf[64];
+    ssize_t len;
+    char *pol[2] = { "inversed", "normal" };
+
+    if (polarity < 0 || polarity > 1)
+        polarity = 0;
+
+    sprintf(buf, "%s", pol[polarity]);
+
+    fh = open(POLARITY_PWM0_PATH, O_WRONLY);
+    if (fh < 0) {
+#ifdef _DEBUG
+        printf("--- No pwm0 polarity available ---\n");
+#endif
+        return -1;
+    }
+    len = strlen(buf);
+    ret = write(fh, buf, (ssize_t) len);
+    if (ret < 0) {
+#ifdef _DEBUG
+        printf("--- Error writing pwm0 polarity ---\n");
+#endif
+        return ret;
+    }
+#ifdef _DEBUG
+        printf("--- pwm0 polarity: %s ---\n", buf);
+#endif
+    // read(fh, buf, sizeof(buf) - 1);
+    // sscanf(buf, "%f", &load);
+    close(fh);
+    return ret;
+}
+
 
 int Read_CpuTemp(void)
 {
@@ -325,10 +372,11 @@ void setsigs(void)
 
 int service_handler(void)
 {
-    int spin, duty, perc;
+    int duty, duty_old, perc;
     int cputemp, i;
 
     g_running = 1;
+    duty_old = MaxDuty;
 
     /*
      * main loop: wait
@@ -336,7 +384,7 @@ int service_handler(void)
     while (g_running) {
         duty = DefaultDuty;
         cputemp = Read_CpuTemp();
-        i = spin = perc = 0;
+        i = perc = 0;
         while (i < CPUTEMPS_MAX) {
             if (cputemp > CpuTemps[i]) {
                 duty = PwmDutyCycles[i];
@@ -345,7 +393,14 @@ int service_handler(void)
             }
             i++;
         }
-        Write_pwm0_duty_cycle(duty);
+        if (duty_old == DefaultDuty && duty != DefaultDuty && duty != duty_old) {
+            Write_pwm0_duty_cycle(MaxDuty);
+            msleep(50);
+        }
+        if (duty != duty_old) {
+            Write_pwm0_duty_cycle(duty);
+        }
+        duty_old = duty;
 #ifdef _DEBUG
         printf("** Temp: %d, duty: %d, %d%%\n", cputemp, duty, perc);
 #endif
@@ -399,9 +454,21 @@ int main(int argc, char **argv)
         perror("Unable to run FAN monitor on pwm0!\n");
         exit(1);
     }
-    msleep(20);
+    msleep(50);
+#if POLARITY == 1
+#ifdef _DEBUG
+    printf("polarity: %d (normal)\n", POLARITY);
+#endif
+#endif
     Write_pwm0_period(1000000);
     msleep(20);
+#ifdef POLARITY
+#ifdef _DEBUG
+    printf("polarity: %d\n", POLARITY);
+#endif
+    Write_pwm0_polarity(POLARITY);
+    msleep(20);
+#endif   
     Write_pwm0_duty_cycle(100000);
     msleep(20);
     Write_pwm0_enable(PWM0_ON);
@@ -461,7 +528,7 @@ int main(int argc, char **argv)
 
             ret = service_handler();
 
-	    Write_pwm0_duty_cycle(DefaultDuty);
+            Write_pwm0_duty_cycle(DefaultDuty);
             unlink(PWM0_PID);
 #ifdef _DEBUG
             printf("--- Child says bye! ret=%d---\n\n", ret);

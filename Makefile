@@ -1,6 +1,7 @@
 ARCH := $(shell getconf LONG_BIT)
 CC = gcc
 CCFLAGS = -Wall
+#CCFLAGS += $(EXTRAFLAGS)
 #LDFLAGS = -lpthread -lrt
 LDFLAGS = -lrt
 PROGNAME = fan-monitor$(ARCH)
@@ -13,12 +14,12 @@ all: release
 # Builds #
 ##########
 
-release: CCFLAGS += -O2 -DNDEBUG
+release: CCFLAGS += -O2 -DNDEBUG $(EXTRAFLAGS)
 release: BUILD = Release
 release: $(MODULES)
 	$(CC) $(CCFLAGS) $(LDFLAGS) -o $(PROGNAME) $(MODULES)
 
-debug: CCFLAGS += -g -D_DEBUG
+debug: CCFLAGS += -g -D_DEBUG $(EXTRAFLAGS)
 debug: BUILD = Debug
 debug: $(MODULES)
 	$(CC) $(CCFLAGS) $(LDFLAGS) -o $(PROGNAME) $(MODULES)
@@ -32,6 +33,9 @@ debug: $(MODULES)
 
 clean:
 	rm -f *.o $(PROGNAME)
+
+update:
+	install ./fan-monitor64 /usr/local/bin/
 
 install:
 	sudo chmod +x ./install_service.sh
