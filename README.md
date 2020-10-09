@@ -45,3 +45,21 @@ After the installation you can check if the service is running, by hearing the F
 * Start the service
 
 		sudo systemctl start fan-monitor
+
+Enhancements
+============
+
+* Polarity support
+
+You can build the service to set **pwm0** with 'normal' polarity instead of 'inversed'.
+
+		make clean
+		EXTRAFLAGS='-DPOLARITY=1' make
+
+
+* Update the running servide with:
+
+		sudo systemctl stop fan-monitor
+		sudo make update
+		sudo systemctl start fan-monitor
+
